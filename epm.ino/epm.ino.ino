@@ -18,6 +18,12 @@ Adafruit_VL53L0X lox2 = Adafruit_VL53L0X();
 Adafruit_VL53L0X lox3 = Adafruit_VL53L0X();
 Adafruit_VL53L0X lox4 = Adafruit_VL53L0X();
 
+// this holds the measurement
+VL53L0X_RangingMeasurementData_t measure1;
+VL53L0X_RangingMeasurementData_t measure2;
+VL53L0X_RangingMeasurementData_t measure3;
+VL53L0X_RangingMeasurementData_t measure4;
+
 /*
     Reset all sensors by setting all of their XSHUT pins low for delay(10), then set all XSHUT high to bring out of reset
     Keep sensor #1 awake by keeping XSHUT pin high
@@ -105,18 +111,28 @@ void setup() {
     while(1);
   }
 
-  // lox1.configSensor(Adafruit_VL53L0X::VL53L0X_SENSE_DEFAULT);
-  // lox2.configSensor(Adafruit_VL53L0X::VL53L0X_SENSE_DEFAULT);
-  // lox3.configSensor(Adafruit_VL53L0X::VL53L0X_SENSE_DEFAULT);
-  // lox4.configSensor(Adafruit_VL53L0X::VL53L0X_SENSE_DEFAULT);
+  lox1.configSensor(Adafruit_VL53L0X::VL53L0X_SENSE_HIGH_ACCURACY);
+  lox2.configSensor(Adafruit_VL53L0X::VL53L0X_SENSE_HIGH_ACCURACY);
+  lox3.configSensor(Adafruit_VL53L0X::VL53L0X_SENSE_HIGH_ACCURACY);
+  lox4.configSensor(Adafruit_VL53L0X::VL53L0X_SENSE_HIGH_ACCURACY);
+  /* Set desired configurations from the options below:
+   *    VL53L0X_SENSE_DEFAULT
+        VL53L0X_SENSE_LONG_RANGE
+        VL53L0X_SENSE_HIGH_SPEED
+        VL53L0X_SENSE_HIGH_ACCURACY
+   */
 }
 
 void loop() {
-  // this holds the measurement
-  VL53L0X_RangingMeasurementData_t measure1;
-  VL53L0X_RangingMeasurementData_t measure2;
-  VL53L0X_RangingMeasurementData_t measure3;
-  VL53L0X_RangingMeasurementData_t measure4;
+  // adjusted mm values
+  double measure1Mm = measure1.RangeMilliMeter;
+  double measure2Mm = measure2.RangeMilliMeter;
+  double measure3Mm = measure3.RangeMilliMeter;
+  double measure4Mm = measure4.RangeMilliMeter;
+  double measure1CmAdjusted = measure1Mm / 10;
+  double measure2CmAdjusted = measure2Mm / 10;
+  double measure3CmAdjusted = (measure3Mm - 15) / 10;
+  double measure4CmAdjusted = measure4Mm / 10;
 
   // read_dual_sensors();
   lox1.rangingTest(&measure1, false); // pass in 'true' to get debug data printout!
@@ -125,43 +141,43 @@ void loop() {
   lox4.rangingTest(&measure4, false); // pass in 'true' to get debug data printout!
 
   // print sensor one reading
-  Serial.print(F("1: "));
+  // Serial.print(F("1: "));
   if(measure1.RangeStatus != 4) {     // if not out of range
-    Serial.print(measure1.RangeMilliMeter);
+    Serial.print(measure1CmAdjusted);
   } else {
     Serial.print(F("Out of range"));
   }
   
-  Serial.print(F(" "));
+  Serial.print(F(", "));
 
   // print sensor two reading
-  Serial.print(F("2: "));
+  // Serial.print(F("2: "));
   if(measure2.RangeStatus != 4) {
-    Serial.print(measure2.RangeMilliMeter);
+    Serial.print(measure2CmAdjusted);
   } else {
     Serial.print(F("Out of range"));
   }
   
-  Serial.print(F(" "));
+  Serial.print(F(", "));
 
   // print sensor three reading
-  Serial.print(F("3: "));
+  // Serial.print(F("3: "));
   if(measure3.RangeStatus != 4) {
-    Serial.print(measure3.RangeMilliMeter);
+    Serial.print(measure3CmAdjusted);
   } else {
     Serial.print(F("Out of range"));
   }
 
-  Serial.print(F(" "));
+  Serial.print(F(", "));
 
   // print sensor four reading
-  Serial.print(F("4: "));
+  // Serial.print(F("4: "));
   if(measure4.RangeStatus != 4) {
-    Serial.print(measure4.RangeMilliMeter);
+    Serial.print(measure4CmAdjusted);
   } else {
     Serial.print(F("Out of range"));
   }
   Serial.println();
 
-  delay(100);
+  // delay(100);
 }
