@@ -1,177 +1,111 @@
-#include "Arduino.h"
-#include "Wire.h"
-#include "DFRobot_VL53L0X.h"
+#include "Adafruit_VL53L0X.h"
 
-// things to record
-// time spent in open arms
-// latency to middle
-// time freezing before crossing into middle
-// time freezing (first 2 min)
-// freezing before crossing/latency to middle = % time frozen 
+// address we will assign if dual sensor is present
+#define LOX1_ADDRESS 0x30
+#define LOX2_ADDRESS 0x31
 
-// recording devices
-// int distSensor1 = A0;
-// int distSensor2 = A1;
-// int distSensor3 = A2;
-// int distSensor4 = A3;
-int xShutTop = 8;
-int xShutRight = 9;
+// set the pins to shutdown
+#define SHT_LOX1 8
+#define SHT_LOX2 10
 
-// raw readings
-float distReading1;
-float distReading2;
-float distReading3;
-// float distReading4;
+// objects for the vl53l0x
+Adafruit_VL53L0X lox1 = Adafruit_VL53L0X();
+Adafruit_VL53L0X lox2 = Adafruit_VL53L0X();
 
-// converted readings
-float distCm1;
-float distCm2;
-float distCm3;
-// float distCm4;
+// this holds the measurement
+VL53L0X_RangingMeasurementData_t measure1;
+VL53L0X_RangingMeasurementData_t measure2;
 
-// converted arrays for averaging
-const int nAvg = 10;
-int avgIndex = 0;
-float average1[nAvg];
-float average2[nAvg];
-float average3[nAvg];
-// float[nAvg] average4;
+/*
+    Reset all sensors by setting all of their XSHUT pins low for delay(10), then set all XSHUT high to bring out of reset
+    Keep sensor #1 awake by keeping XSHUT pin high
+    Put all other sensors into shutdown by pulling XSHUT pins low
+    Initialize sensor #1 with lox.begin(new_i2c_address) Pick any number but 0x29 and it must be under 0x7F. Going with 0x30 to 0x3F is probably OK.
+    Keep sensor #1 awake, and now bring sensor #2 out of reset by setting its XSHUT pin high.
+    Initialize sensor #2 with lox.begin(new_i2c_address) Pick any number but 0x29 and whatever you set the first sensor to
+ */
+void setID() {
+  // all reset
+  digitalWrite(SHT_LOX1, LOW);    
+  digitalWrite(SHT_LOX2, LOW);
+  delay(10);
+  // all unreset
+  digitalWrite(SHT_LOX1, HIGH);
+  digitalWrite(SHT_LOX2, HIGH);
+  delay(10);
 
-int max_range = 520;
-double adc_solution = 1023.0;
+  // activating LOX1 and resetting LOX2
+  digitalWrite(SHT_LOX1, HIGH);
+  digitalWrite(SHT_LOX2, LOW);
 
-//sensor 3
-DFRobot_VL53L0X sensor;
-DFRobot_VL53L0X sensorRight;
+  // initing LOX1
+  if(!lox1.begin(LOX1_ADDRESS)) {
+    Serial.println(F("Failed to boot first VL53L0X"));
+    while(1);
+  }
+  delay(10);
 
-float leftInit;
-float leftSum = 0;
-float leftI = 0;
-float rightInit;
-float rightSum = 0;
-float rightI = 0;
-float topInit;
-float topSum = 0;
-float topI = 0;
+  // activating LOX2
+  digitalWrite(SHT_LOX2, HIGH);
+  delay(10);
+
+  //initing LOX2
+  if(!lox2.begin(LOX2_ADDRESS)) {
+    Serial.println(F("Failed to boot second VL53L0X"));
+    while(1);
+  }
+}
+
+void read_dual_sensors() {
+  
+  lox1.rangingTest(&measure1, false); // pass in 'true' to get debug data printout!
+  lox2.rangingTest(&measure2, false); // pass in 'true' to get debug data printout!
+
+  // print sensor one reading
+  Serial.print(F("1: "));
+  if(measure1.RangeStatus != 4) {     // if not out of range
+    Serial.print(measure1.RangeMilliMeter);
+  } else {
+    Serial.print(F("Out of range"));
+  }
+  
+  Serial.print(F(" "));
+
+  // print sensor two reading
+  Serial.print(F("2: "));
+  if(measure2.RangeStatus != 4) {
+    Serial.print(measure2.RangeMilliMeter);
+  } else {
+    Serial.print(F("Out of range"));
+  }
+  
+  Serial.println();
+}
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
 
-  pinMode(xShutTop, OUTPUT);
-  digitalWrite(xShutTop, LOW);
-  pinMode(xShutRight, OUTPUT);
-  digitalWrite(xShutRight, LOW);
-  delay(10);
-  digitalWrite(xShutTop, HIGH);
-  pinMode(xShutTop, INPUT);
+  // wait until serial port opens for native USB devices
+  while (! Serial) { delay(1); }
 
-  Wire.begin(); // Initialize I2C communication
+  pinMode(SHT_LOX1, OUTPUT);
+  pinMode(SHT_LOX2, OUTPUT);
 
-  // Set I2C sub-device address for sensor
-  sensor.begin();
-  // sensorRight.begin(0x51);
-  sensor.setMode(sensor.eContinuous, sensor.eHigh);
-  sensor.start();
+  Serial.println(F("Shutdown pins inited..."));
 
-  digitalWrite(xShutRight, HIGH);
-  pinMode(xShutRight, INPUT);
+  digitalWrite(SHT_LOX1, LOW);
+  digitalWrite(SHT_LOX2, LOW);
 
-  sensorRight.begin(0x30);
-  // sensorRight.begin(0x51);
-  sensorRight.setMode(sensor.eContinuous, sensor.eHigh);
-  sensorRight.start();
-
-  // // Set I2C sub-device address for sensorRight
-  // sensorRight.begin(0x51);
-  // sensorRight.setMode(sensor.eContinuous, sensor.eHigh);
-  // sensorRight.start();
-
-  // Turn off all ports for both devices
-  // Wire.beginTransmission(0x50); // device 1
-  // Wire.write(0x00); // all ports off
-  // Wire.endTransmission();
-
-  // Wire.beginTransmission(0x51); // device 2
-  // Wire.write(0x00); // all ports off
-  // Wire.endTransmission();
-  // sensor.setAddress(0x2A + 1);
-  // sensors.startContinuous(50);
-  // for sensor3
-  //join i2c bus (address optional for master)
-  // Wire.begin();
-  // //Set I2C sub-device address
-  // sensor.begin(0x50);
-  // //Set to Back-to-back mode and high precision mode
-  // sensor.setMode(sensor.eContinuous,sensor.eHigh);
-  // //Laser rangefinder begins to work
-  // sensor.start();
-
-
-  // //Set I2C sub-device address
-  // sensorRight.begin(0x51);
-  // //Set to Back-to-back mode and high precision mode
-  // sensorRight.setMode(sensor.eContinuous,sensor.eHigh);
-  // //Laser rangefinder begins to work
-  // sensorRight.start();
-
-  // Wire.begin();
-  // Wire.beginTransmission(0x50); // device 1
-  // Wire.write(0x00); // all ports off
-  // Wire.endTransmission();
-  // Wire.begin();
-  // Wire.beginTransmission(0x51); // device 2
-  // Wire.write(0x00); // all ports off
-  // Wire.endTransmission();
+  Serial.println(F("Both in reset mode...(pins are low)"));
+  
+  
+  Serial.println(F("Starting..."));
+  setID();
+ 
 }
 
 void loop() {
-  // read the value from the sensor:
-  distReading1 = sensorRight.getDistance();
-  // distReading2 = analogRead(distSensor2);
-  distReading3 = sensor.getDistance();
-  // distReading4 = analogRead(distSensor4);
-
-  // account for range vs 10 bit accuracy
-  distCm1 = (distReading1 - 25) / 10;
-  // distCm2 = distReading2 * max_range / adc_solution;
-  distCm3 = (distReading3 - 25) / 10;
-  // distCm2 = distReading4 * max_range / adc_solution;
-
-  // calibration
-  // if (millis() < 5000){
-  //   rightSum += distCm1;
-  //   rightI ++;
-  //   leftSum += distCm2;
-  //   leftI ++;
-  //   topSum += distCm3;
-  //   topI ++;
-  //   Serial.println("waiting");
-  // } else if (millis() > 5000 && millis() < 6000) {
-  //   rightInit = rightSum/rightI;
-  //   leftInit = leftSum/leftI;
-  //   topInit = topSum/topI;
-  //   Serial.print("right ");
-  //   Serial.print(rightInit);
-  //   Serial.print("cm left ");
-  //   Serial.print(leftInit);
-  //   Serial.print("cm top ");
-  //   Serial.print(topInit);
-  //   Serial.println("cm");
-  // } else {
-  //   Serial.print("right ");
-  //   Serial.print(distCm1, 0);
-  //   Serial.print("cm left ");
-  //   Serial.print(distCm2, 0);
-  //   Serial.print("cm top ");
-  //   Serial.print(distCm3, 0);
-  //   Serial.println("cm");
-  // }
-  Serial.print("right ");
-  Serial.print(distCm1, 0);
-  // Serial.print("cm left ");
-  // Serial.print(distCm2, 0);
-  Serial.print(" cm top ");
-  Serial.print(distCm3, 0);
-  Serial.println("cm");
+   
+  read_dual_sensors();
   delay(100);
 }
