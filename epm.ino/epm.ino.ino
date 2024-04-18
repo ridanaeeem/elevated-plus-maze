@@ -12,10 +12,6 @@
 Adafruit_VL53L0X lox1 = Adafruit_VL53L0X();
 Adafruit_VL53L0X lox2 = Adafruit_VL53L0X();
 
-// this holds the measurement
-VL53L0X_RangingMeasurementData_t measure1;
-VL53L0X_RangingMeasurementData_t measure2;
-
 /*
     Reset all sensors by setting all of their XSHUT pins low for delay(10), then set all XSHUT high to bring out of reset
     Keep sensor #1 awake by keeping XSHUT pin high
@@ -78,8 +74,11 @@ void setup() {
 }
 
 void loop() {
-  // read_dual_sensors();
+  // this holds the measurement
+  VL53L0X_RangingMeasurementData_t measure1;
+  VL53L0X_RangingMeasurementData_t measure2;
 
+  // read_dual_sensors();
   lox1.rangingTest(&measure1, false); // pass in 'true' to get debug data printout!
   lox2.rangingTest(&measure2, false); // pass in 'true' to get debug data printout!
 
