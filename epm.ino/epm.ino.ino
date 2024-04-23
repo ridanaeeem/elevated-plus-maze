@@ -24,6 +24,15 @@ VL53L0X_RangingMeasurementData_t measure2;
 VL53L0X_RangingMeasurementData_t measure3;
 VL53L0X_RangingMeasurementData_t measure4;
 
+//right, left, bottom, top
+double prev[] = {0,0,0,0};
+double curr[] = {0,0,0,0};
+
+bool frozen = false;
+
+double mouseLength = 8;
+double mousewIdth = 1;
+
 /*
     Reset all sensors by setting all of their XSHUT pins low for delay(10), then set all XSHUT high to bring out of reset
     Keep sensor #1 awake by keeping XSHUT pin high
@@ -124,6 +133,25 @@ void setup() {
 }
 
 void loop() {
+  if (frozen) {
+    Serial.println("FROZEN");
+  }
+  else {
+    Serial.println("NOT FROZEN");
+    Serial.println("right, left, bottom, top");
+    for (int i=0; i<4; i++){
+      Serial.print(prev[i]);
+      Serial.print(" ");
+    }
+    Serial.println();
+    for (int i=0; i<4; i++){
+      Serial.print(curr[i]);
+      Serial.print(" ");
+    }
+    Serial.println();
+  }
+
+
   // adjusted mm values
   double measure1Mm = measure1.RangeMilliMeter;
   double measure2Mm = measure2.RangeMilliMeter;
@@ -131,8 +159,29 @@ void loop() {
   double measure4Mm = measure4.RangeMilliMeter;
   double measure1CmAdjusted = measure1Mm / 10;
   double measure2CmAdjusted = measure2Mm / 10;
-  double measure3CmAdjusted = (measure3Mm - 15) / 10;
+  double measure3CmAdjusted = (measure3Mm - 20) / 10;
+  // double measure3CmAdjusted = measure3Mm / 10;
   double measure4CmAdjusted = measure4Mm / 10;
+
+  // first iteration, set current measurements
+  if (curr[0] == 0){
+    curr[0] = measure1CmAdjusted;
+    curr[1] = measure2CmAdjusted;
+    curr[2] = measure3CmAdjusted;
+    curr[3] = measure4CmAdjusted;
+  // second iteration, set those last current to previous and update current
+  // same for every future iteration
+  } else {
+    // prev = curr;
+    for (int i=0; i<4; i++){
+      prev[i] = curr[i];
+    } 
+    // curr = new
+    curr[0] = measure1CmAdjusted;
+    curr[1] = measure2CmAdjusted;
+    curr[2] = measure3CmAdjusted;
+    curr[3] = measure4CmAdjusted;
+  }
 
   // read_dual_sensors();
   lox1.rangingTest(&measure1, false); // pass in 'true' to get debug data printout!
@@ -140,44 +189,74 @@ void loop() {
   lox3.rangingTest(&measure3, false); // pass in 'true' to get debug data printout!
   lox4.rangingTest(&measure4, false); // pass in 'true' to get debug data printout!
 
-  // print sensor one reading
-  // Serial.print(F("1: "));
-  if(measure1.RangeStatus != 4) {     // if not out of range
-    Serial.print(measure1CmAdjusted);
+  // calculating freezing
+  double threshold = 0.2;
+  bool inRange = false;
+  if (abs(prev[0] - curr[0]) >= threshold && abs(prev[1] - curr[1]) >= threshold 
+  && prev[0] <=30 && prev[1] <=30 && curr[0] <=30 && curr[1] <=30
+  && curr[2] > 10 && curr[3] > 10
+  && abs(prev[0] - curr[0]) <= abs(prev[1] - curr[1]) * 1.5) {
+    frozen = false;
+  } else if (abs(prev[2] - curr[2]) >= threshold && abs(prev[3] - curr[3] 
+  && prev[2] <=30 && prev[3] <=30 && curr[2] <=30 && curr[3] <=30) >= threshold
+  && curr[0] > 10 && curr[1] > 10
+  && abs(prev[0] - curr[0]) <= abs(prev[1] - curr[1]) * 1.5){
+    frozen = false;
   } else {
-    Serial.print(F("Out of range"));
+    frozen = true;
   }
+
+  // printing
+  // Serial.println("right, left, bottom, top");
+  // // print sensor one reading
+  // // Serial.print(F("1: "));
+  // if(measure1.RangeStatus != 4) {     // if not out of range
+  //   Serial.print(measure1CmAdjusted);
+  // } else {
+  //   Serial.print(F("Out of range"));
+  // }
   
-  Serial.print(F(", "));
+  // Serial.print(F(", "));
 
-  // print sensor two reading
-  // Serial.print(F("2: "));
-  if(measure2.RangeStatus != 4) {
-    Serial.print(measure2CmAdjusted);
-  } else {
-    Serial.print(F("Out of range"));
-  }
+  // // print sensor two reading
+  // // Serial.print(F("2: "));
+  // if(measure2.RangeStatus != 4) {
+  //   Serial.print(measure2CmAdjusted);
+  // } else {
+  //   Serial.print(F("Out of range"));
+  // }
   
-  Serial.print(F(", "));
+  // Serial.print(F(", "));
 
-  // print sensor three reading
-  // Serial.print(F("3: "));
-  if(measure3.RangeStatus != 4) {
-    Serial.print(measure3CmAdjusted);
-  } else {
-    Serial.print(F("Out of range"));
-  }
+  // // print sensor three reading
+  // // Serial.print(F("3: "));
+  // if(measure3.RangeStatus != 4) {
+  //   Serial.print(measure3CmAdjusted);
+  // } else {
+  //   Serial.print(F("Out of range"));
+  // }
 
-  Serial.print(F(", "));
+  // Serial.print(F(", "));
 
-  // print sensor four reading
-  // Serial.print(F("4: "));
-  if(measure4.RangeStatus != 4) {
-    Serial.print(measure4CmAdjusted);
-  } else {
-    Serial.print(F("Out of range"));
-  }
-  Serial.println();
+  // // print sensor four reading
+  // // Serial.print(F("4: "));
+  // if(measure4.RangeStatus != 4) {
+  //   Serial.print(measure4CmAdjusted);
+  // } else {
+  //   Serial.print(F("Out of range"));
+  // }
+  // Serial.println();
+
+  // for (int i=0; i<4; i++){
+  //   Serial.print(prev[i]);
+  //   Serial.print(" ");
+  // }
+  // Serial.println();
+  // for (int i=0; i<4; i++){
+  //   Serial.print(curr[i]);
+  //   Serial.print(" ");
+  // }
+  // Serial.println();
 
   // delay(100);
 }
