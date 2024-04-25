@@ -30,8 +30,21 @@ double curr[] = {0,0,0,0};
 
 bool frozen = false;
 
+// each sensor is 30cm away from the one across it
 double mouseLength = 8;
-double mousewIdth = 1;
+double mousewidth = 1;
+
+double xPosition;
+double yPosition;
+double prevX;
+double prevY;
+
+double lastTime;
+double timeFrozen = 0;
+bool updateTime = false;
+double lastTimeOpenArms;
+double timeFrozenOpenArms = 0;
+bool updateTimeOpenArms = false; 
 
 /*
     Reset all sensors by setting all of their XSHUT pins low for delay(10), then set all XSHUT high to bring out of reset
@@ -120,10 +133,10 @@ void setup() {
     while(1);
   }
 
-  lox1.configSensor(Adafruit_VL53L0X::VL53L0X_SENSE_HIGH_ACCURACY);
-  lox2.configSensor(Adafruit_VL53L0X::VL53L0X_SENSE_HIGH_ACCURACY);
-  lox3.configSensor(Adafruit_VL53L0X::VL53L0X_SENSE_HIGH_ACCURACY);
-  lox4.configSensor(Adafruit_VL53L0X::VL53L0X_SENSE_HIGH_ACCURACY);
+  lox1.configSensor(Adafruit_VL53L0X::VL53L0X_SENSE_DEFAULT);
+  lox2.configSensor(Adafruit_VL53L0X::VL53L0X_SENSE_DEFAULT);
+  lox3.configSensor(Adafruit_VL53L0X::VL53L0X_SENSE_DEFAULT);
+  lox4.configSensor(Adafruit_VL53L0X::VL53L0X_SENSE_DEFAULT);
   /* Set desired configurations from the options below:
    *    VL53L0X_SENSE_DEFAULT
         VL53L0X_SENSE_LONG_RANGE
@@ -132,35 +145,73 @@ void setup() {
    */
 }
 
-void loop() {
+void loop() {  
   if (frozen) {
+    // started freezing
+    if (updateTime){
+      lastTime = millis();
+      lastTimeOpenArms = millis(); 
+      updateTime = false;
+    } 
     Serial.println("FROZEN");
   }
   else {
     Serial.println("NOT FROZEN");
-    Serial.println("right, left, bottom, top");
-    for (int i=0; i<4; i++){
-      Serial.print(prev[i]);
-      Serial.print(" ");
+    // Serial.println("right, left, bottom, top");
+    // for (int i=0; i<4; i++){
+    //   Serial.print(prev[i]);
+    //   Serial.print(" ");
+    // }
+    // Serial.println();
+    // for (int i=0; i<4; i++){
+    //   Serial.print(curr[i]);
+    //   Serial.print(" ");
+    // }
+    // Serial.println();
+
+    if (!updateTime){
+      timeFrozen += (millis() - lastTime);
+      if (yPosition < 0 || yPosition > 35){
+        timeFrozenOpenArms += (millis() - lastTimeOpenArms);
+      }
+      updateTime = true;
     }
-    Serial.println();
-    for (int i=0; i<4; i++){
-      Serial.print(curr[i]);
-      Serial.print(" ");
-    }
-    Serial.println();
+    // if (!updateTimeOpenArms && curr[1] > 0 && curr[0] > 0 && (curr[1] < 10) || curr[2] < 10) {
+    // if (!updateTimeOpenArms && (yPosition < 0 || yPosition > 35)) {
+    //   timeFrozenOpenArms += (millis() - lastTimeOpenArms);
+    //   updateTimeOpenArms = true;
+    // }
   }
-
-
-  // adjusted mm values
+  // Serial.println("right, left, bottom, top");
+  // for (int i=0; i<4; i++){
+  //   Serial.print(prev[i]);
+  //   Serial.print(" ");
+  // }
+  // Serial.println();
+  // for (int i=0; i<4; i++){
+  //   Serial.print(curr[i]);
+  //   Serial.print(" ");
+  // }
+  Serial.println();
+  Serial.print("Total time (ms): ");
+  Serial.print(millis());
+  Serial.println();
+  Serial.print("Total time frozen (ms): ");
+  Serial.print(timeFrozen);
+  Serial.println();
+  Serial.print("Total time frozen in open arms (ms): ");
+  Serial.print(timeFrozenOpenArms);
+  Serial.println();
   double measure1Mm = measure1.RangeMilliMeter;
   double measure2Mm = measure2.RangeMilliMeter;
   double measure3Mm = measure3.RangeMilliMeter;
   double measure4Mm = measure4.RangeMilliMeter;
+
+  // adjusted mm values 
   double measure1CmAdjusted = measure1Mm / 10;
   double measure2CmAdjusted = measure2Mm / 10;
-  double measure3CmAdjusted = (measure3Mm - 20) / 10;
-  // double measure3CmAdjusted = measure3Mm / 10;
+  // double measure3CmAdjusted = (measure3Mm - 20) / 10;
+  double measure3CmAdjusted = measure3Mm / 10;
   double measure4CmAdjusted = measure4Mm / 10;
 
   // first iteration, set current measurements
@@ -189,22 +240,101 @@ void loop() {
   lox3.rangingTest(&measure3, false); // pass in 'true' to get debug data printout!
   lox4.rangingTest(&measure4, false); // pass in 'true' to get debug data printout!
 
+  prevX = xPosition;
+  prevY = yPosition;
+
+  // left - (30 - left - right)
+  // double diff = 30 - curr[0] - curr[1];
+  // xPosition = curr[1] + diff;
+  xPosition = curr[1];
+  // right 
+  // diff = 30 - curr[2] - curr[3];
+  // yPosition = curr[2] + diff;
+  yPosition = curr[2];
+
   // calculating freezing
-  double threshold = 0.2;
-  bool inRange = false;
-  if (abs(prev[0] - curr[0]) >= threshold && abs(prev[1] - curr[1]) >= threshold 
-  && prev[0] <=30 && prev[1] <=30 && curr[0] <=30 && curr[1] <=30
-  && curr[2] > 10 && curr[3] > 10
-  && abs(prev[0] - curr[0]) <= abs(prev[1] - curr[1]) * 1.5) {
+  // double threshold = 0.2;
+  // default
+  double threshold = 0.4;
+
+  double deltaLeft = abs(prev[0] - curr[0]);
+  double deltaRight = abs(prev[1] - curr[1]);
+  double minX = min(deltaLeft, deltaRight);
+  double maxX = max(deltaLeft, deltaRight);
+  double deltaBottom = abs(prev[2] - curr[2]);
+  double deltaTop = abs(prev[3] - curr[3]);
+  double minY = min(deltaBottom, deltaTop);
+  double maxY = max(deltaBottom, deltaTop);
+
+
+  // somewhere in middle
+  //   left and right:
+  //      Δleft and Δright both >= threshold
+  //      Δmax <= Δmin * 1.5 (should have pretty similar changes in one axis)
+  if (deltaLeft >= threshold && deltaRight >= threshold && xPosition > 0
+  && maxX <= minX * 1.5
+  ) 
+  {
     frozen = false;
-  } else if (abs(prev[2] - curr[2]) >= threshold && abs(prev[3] - curr[3] 
-  && prev[2] <=30 && prev[3] <=30 && curr[2] <=30 && curr[3] <=30) >= threshold
-  && curr[0] > 10 && curr[1] > 10
-  && abs(prev[0] - curr[0]) <= abs(prev[1] - curr[1]) * 1.5){
+  } else if (deltaBottom >= threshold && deltaTop >= threshold && yPosition > 0
+  && maxY <= minY * 1.5
+  )
+  {
     frozen = false;
+  // in left or right arm
   } else {
     frozen = true;
   }
+
+  // somewhere in middle
+  //   left and right:
+  //      ΔxPosition >= threshold
+  //      left and right not out of bounds
+  //      Δleft <= Δright.* 1.5 (should have pretty similar changes in one axis)
+  // if (abs(prevX - xPosition) >= threshold
+  // && xPosition > 0)
+  // // && prev[0] <=30 && prev[1] <=30 && curr[0] <=30 && curr[1] <=30) 
+  // {
+  //  if (abs(prev[0] - curr[0]) <= abs(prev[1] - curr[1])){
+  //     if (abs(prev[1] - curr[1] <= (abs(prev[0] - curr[0]) * 1.5))){
+  //       frozen = false;
+  //     } else frozen = true;
+  //   } else if (abs(prev[1] - curr[1]) <= abs(prev[0] - curr[0])){
+  //     if (abs(prev[0] - curr[0] <= (abs(prev[1] - curr[1]) * 1.5))){
+  //       frozen = false;
+  //     } else frozen = true;
+  //   } else frozen = true;
+  // } else if (abs(prevY - yPosition) >= threshold
+  // && yPosition > 0)
+  // // && prev[2] <=30 && prev[3] <=30 && curr[2] <=30 && curr[3] <=30) 
+  // {
+  //   if (abs(prev[2] - curr[2]) <= abs(prev[3] - curr[3])){
+  //     if (abs(prev[3] - curr[3] <= (abs(prev[2] - curr[2]) * 1.5))){
+  //       frozen = false;
+  //     } else frozen = true;
+  //   } else if (abs(prev[3] - curr[3]) <= abs(prev[2] - curr[2])){
+  //     if (abs(prev[2] - curr[2] <= (abs(prev[3] - curr[3]) * 1.5))){
+  //       frozen = false;
+  //     } else frozen = true;
+  //   } else frozen = true;
+  // // in left or right arm
+  // } else {
+  //   frozen = true;
+  // }
+
+  // if (abs(prevX - xPosition) >= threshold && xPosition > 0){
+  //   if (maxX <= minX * 1.5){
+  //     frozen = false;
+  //   } else {
+  //     frozen = true;
+  //   }
+  // } else if (abs(prevY - yPosition) >= threshold && yPosition > 0){
+  //   if (maxY <= minY * 1.5){
+  //     frozen = false;
+  //   } else {
+  //     frozen = true;
+  //   }
+  // }
 
   // printing
   // Serial.println("right, left, bottom, top");
@@ -246,6 +376,12 @@ void loop() {
   //   Serial.print(F("Out of range"));
   // }
   // Serial.println();
+
+  Serial.println("XPOSITION + YPOSITION ");
+  Serial.print(xPosition);
+  Serial.print(" ");
+  Serial.print(yPosition);
+  Serial.println();
 
   // for (int i=0; i<4; i++){
   //   Serial.print(prev[i]);
