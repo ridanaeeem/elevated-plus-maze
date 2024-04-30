@@ -1,6 +1,6 @@
 #include "Adafruit_VL53L0X.h"
 
-// address we will assign if dual sensor is present
+// address we will assign if sensor is present
 #define LOX1_ADDRESS 0x30
 #define LOX2_ADDRESS 0x31
 #define LOX3_ADDRESS 0x32
@@ -58,9 +58,7 @@ bool updateTimeOpenArms = false;
 void setup() {
   Serial.begin(115200);
 
-  // wait until serial port opens for native USB devices
-  // while (! Serial) { delay(1); }
-
+  // set all shutdown pins as outputs
   pinMode(SHT_LOX1, OUTPUT);
   pinMode(SHT_LOX2, OUTPUT);
   pinMode(SHT_LOX3, OUTPUT);
@@ -76,10 +74,9 @@ void setup() {
 
   Serial.println(F("All in reset mode...(pins are low)"));
   
-  
   Serial.println(F("Starting..."));
   
-  // setID()
+
   delay(10);
   // all unreset
   digitalWrite(SHT_LOX1, HIGH);
@@ -88,7 +85,7 @@ void setup() {
   digitalWrite(SHT_LOX4, HIGH);
   delay(10);
 
-  // activating LOX1 and resetting LOX2
+  // activating LOX1 and resetting others
   digitalWrite(SHT_LOX1, HIGH);
   digitalWrite(SHT_LOX2, LOW);
   digitalWrite(SHT_LOX3, LOW);
@@ -157,18 +154,7 @@ void loop() {
   }
   else {
     Serial.println("NOT FROZEN");
-    // Serial.println("right, left, bottom, top");
-    // for (int i=0; i<4; i++){
-    //   Serial.print(prev[i]);
-    //   Serial.print(" ");
-    // }
-    // Serial.println();
-    // for (int i=0; i<4; i++){
-    //   Serial.print(curr[i]);
-    //   Serial.print(" ");
-    // }
-    // Serial.println();
-
+    // update time if haven't already
     if (!updateTime){
       timeFrozen += (millis() - lastTime);
       if (yPosition < 0 || yPosition > 35){
@@ -176,11 +162,6 @@ void loop() {
       }
       updateTime = true;
     }
-    // if (!updateTimeOpenArms && curr[1] > 0 && curr[0] > 0 && (curr[1] < 10) || curr[2] < 10) {
-    // if (!updateTimeOpenArms && (yPosition < 0 || yPosition > 35)) {
-    //   timeFrozenOpenArms += (millis() - lastTimeOpenArms);
-    //   updateTimeOpenArms = true;
-    // }
   }
   // Serial.println("right, left, bottom, top");
   // for (int i=0; i<4; i++){
@@ -210,7 +191,6 @@ void loop() {
   // adjusted mm values 
   double measure1CmAdjusted = measure1Mm / 10;
   double measure2CmAdjusted = measure2Mm / 10;
-  // double measure3CmAdjusted = (measure3Mm - 20) / 10;
   double measure3CmAdjusted = measure3Mm / 10;
   double measure4CmAdjusted = measure4Mm / 10;
 
@@ -220,6 +200,7 @@ void loop() {
     curr[1] = measure2CmAdjusted;
     curr[2] = measure3CmAdjusted;
     curr[3] = measure4CmAdjusted;
+    
   // second iteration, set those last current to previous and update current
   // same for every future iteration
   } else {
@@ -243,13 +224,16 @@ void loop() {
   prevX = xPosition;
   prevY = yPosition;
 
+  // originally tried calibrating and getting an absolute positiom
   // left - (30 - left - right)
   // double diff = 30 - curr[0] - curr[1];
   // xPosition = curr[1] + diff;
-  xPosition = curr[1];
   // right 
   // diff = 30 - curr[2] - curr[3];
   // yPosition = curr[2] + diff;
+
+  // x = left, y = bottom worked better
+  xPosition = curr[1];
   yPosition = curr[2];
 
   // calculating freezing
@@ -266,77 +250,29 @@ void loop() {
   double minY = min(deltaBottom, deltaTop);
   double maxY = max(deltaBottom, deltaTop);
 
-
-  // somewhere in middle
-  //   left and right:
+  //   left and right example:
   //      Δleft and Δright both >= threshold
   //      Δmax <= Δmin * 1.5 (should have pretty similar changes in one axis)
   if (deltaLeft >= threshold && deltaRight >= threshold && xPosition > 0
-  && maxX <= minX * 1.5
-  ) 
-  {
+  && maxX <= minX * 1.5) {
     frozen = false;
   } else if (deltaBottom >= threshold && deltaTop >= threshold && yPosition > 0
-  && maxY <= minY * 1.5
-  )
-  {
+  && maxY <= minY * 1.5) {
     frozen = false;
-  // in left or right arm
   } else {
     frozen = true;
   }
 
-  // somewhere in middle
-  //   left and right:
-  //      ΔxPosition >= threshold
-  //      left and right not out of bounds
-  //      Δleft <= Δright.* 1.5 (should have pretty similar changes in one axis)
-  // if (abs(prevX - xPosition) >= threshold
-  // && xPosition > 0)
-  // // && prev[0] <=30 && prev[1] <=30 && curr[0] <=30 && curr[1] <=30) 
-  // {
-  //  if (abs(prev[0] - curr[0]) <= abs(prev[1] - curr[1])){
-  //     if (abs(prev[1] - curr[1] <= (abs(prev[0] - curr[0]) * 1.5))){
-  //       frozen = false;
-  //     } else frozen = true;
-  //   } else if (abs(prev[1] - curr[1]) <= abs(prev[0] - curr[0])){
-  //     if (abs(prev[0] - curr[0] <= (abs(prev[1] - curr[1]) * 1.5))){
-  //       frozen = false;
-  //     } else frozen = true;
-  //   } else frozen = true;
-  // } else if (abs(prevY - yPosition) >= threshold
-  // && yPosition > 0)
-  // // && prev[2] <=30 && prev[3] <=30 && curr[2] <=30 && curr[3] <=30) 
-  // {
-  //   if (abs(prev[2] - curr[2]) <= abs(prev[3] - curr[3])){
-  //     if (abs(prev[3] - curr[3] <= (abs(prev[2] - curr[2]) * 1.5))){
-  //       frozen = false;
-  //     } else frozen = true;
-  //   } else if (abs(prev[3] - curr[3]) <= abs(prev[2] - curr[2])){
-  //     if (abs(prev[2] - curr[2] <= (abs(prev[3] - curr[3]) * 1.5))){
-  //       frozen = false;
-  //     } else frozen = true;
-  //   } else frozen = true;
-  // // in left or right arm
-  // } else {
-  //   frozen = true;
-  // }
+  // coordinate printing
+  Serial.println("XPOSITION + YPOSITION ");
+  Serial.print(xPosition);
+  Serial.print(" ");
+  Serial.print(yPosition);
+  Serial.println();
 
-  // if (abs(prevX - xPosition) >= threshold && xPosition > 0){
-  //   if (maxX <= minX * 1.5){
-  //     frozen = false;
-  //   } else {
-  //     frozen = true;
-  //   }
-  // } else if (abs(prevY - yPosition) >= threshold && yPosition > 0){
-  //   if (maxY <= minY * 1.5){
-  //     frozen = false;
-  //   } else {
-  //     frozen = true;
-  //   }
-  // }
 
-  // printing
+  // extra printing for testing
+
   // Serial.println("right, left, bottom, top");
   // // print sensor one reading
   // // Serial.print(F("1: "));
@@ -377,12 +313,6 @@ void loop() {
   // }
   // Serial.println();
 
-  Serial.println("XPOSITION + YPOSITION ");
-  Serial.print(xPosition);
-  Serial.print(" ");
-  Serial.print(yPosition);
-  Serial.println();
-
   // for (int i=0; i<4; i++){
   //   Serial.print(prev[i]);
   //   Serial.print(" ");
@@ -393,6 +323,4 @@ void loop() {
   //   Serial.print(" ");
   // }
   // Serial.println();
-
-  // delay(100);
 }
